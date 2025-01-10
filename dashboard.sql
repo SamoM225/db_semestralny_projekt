@@ -1,12 +1,15 @@
 -- Graf 1 - Rozdelenie uživateľov podľa pohlavia
-SELECT
+SELECT 
     u.gender AS user_gender,
-    COUNT(DISTINCT r.fact_ratingid) AS num_unique_ratings
-FROM fact_rating r
-    JOIN dim_users u ON r.dim_userid = u.dim_userid
-GROUP BY
+    COUNT(r.fact_ratingid) AS num_unique_ratings
+FROM 
+    fact_rating r
+JOIN 
+    dim_users u ON r.dim_userid = r.fact_ratingid
+GROUP BY 
     u.gender
-ORDER BY num_unique_ratings DESC;
+ORDER BY 
+    num_unique_ratings DESC;
 -- Graf 2 - Rozdelenie uživateľov podľa veku
 SELECT 
     u.age_group AS age_group,
