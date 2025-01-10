@@ -149,12 +149,20 @@ ORDER BY
     DATE_PART(minute, rated_at),
     DATE_PART(second, rated_at);
 
+CREATE OR REPLACE TABLE dim_tags AS
+SELECT DISTINCT
+    ROW_NUMBER() OVER (ORDER BY tags) AS dim_tagid,
+    movie_id,
+    tags AS tag
+FROM tags_staging
+WHERE tags IS NOT NULL;
+
 CREATE OR REPLACE TABLE fact_rating AS
 SELECT
     r.id AS fact_ratingid,
     r.rated_at AS rated_at,
     r.rating,
-    LISTAGG(tg.dim_tagid, ',') WITHIN GROUP (ORDER BY tg.dim_tagid) AS combined_tags,
+    tg.dim_tagid AS dim_tagid,
     d.dim_dateid AS dim_dateid,
     t.dim_timeid AS dim_timeid,
     u.dim_userid AS dim_userid,
@@ -167,13 +175,8 @@ JOIN dim_time t ON DATE_PART(hour, r.rated_at) = t.hour
 LEFT JOIN dim_users u ON r.user_id = u.dim_userid
 LEFT JOIN dim_movies m ON r.movie_id = m.dim_movieid
 LEFT JOIN dim_tags tg ON r.movie_id = tg.movie_id
-GROUP BY r.id, r.rated_at, r.rating, d.dim_dateid, t.dim_timeid, u.dim_userid, m.dim_movieid
+GROUP BY r.id, r.rated_at, r.rating, d.dim_dateid, t.dim_timeid, u.dim_userid, m.dim_movieid, tg.movie_id, tg.dim_tagid
 ORDER BY r.id;
-
-SELECT r.user_id, u.dim_userid, r.id
-FROM ratings_staging r
-LEFT JOIN dim_users u ON r.user_id = u.dim_userid
-WHERE u.dim_userid IS NULL;
 
 
 DROP TABLE IF EXISTS age_group_staging; 
