@@ -8,12 +8,17 @@ GROUP BY
     u.gender
 ORDER BY num_unique_ratings DESC;
 -- Graf 2 - Rozdelenie uživateľov podľa veku
-SELECT u.age_group AS age_group, COUNT(DISTINCT fr.fact_ratingid) AS num_ratings
-FROM fact_rating fr
-    JOIN dim_users u ON fr.dim_userid = u.dim_userid
-GROUP BY
+SELECT 
+    u.age_group AS age_group,
+    COUNT(fr.fact_ratingid) AS num_ratings
+FROM 
+    fact_rating fr
+JOIN 
+    dim_users u ON fr.dim_userid = u.dim_userid
+GROUP BY 
     u.age_group
-ORDER BY num_ratings DESC;
+ORDER BY 
+    num_ratings DESC;
 -- Graf 3 - Priemerne hodnotenie na žáner
 SELECT 
     m.genre AS genre, 
