@@ -106,16 +106,19 @@ CREATE OR REPLACE TABLE dim_movies AS
 SELECT DISTINCT 
     m.id AS dim_movieid,
     m.title AS title,
-    m.release_year AS release_year
-FROM movies_staging m;
+    g.name AS genre,
+    m.release_year AS release_year,
+FROM movies_staging m
+JOIN genres_movies_staging gr ON m.id = gr.movie_id
+JOIN genres_staging g ON gr.genre_id = g.id;
 
 CREATE OR REPLACE TABLE dim_users AS
 SELECT DISTINCT
     u.id AS dim_userid,
-    u.age,
+    ag.name AS age_group,
     u.gender,
     o.name AS occupation,
-    ag.name AS age_group
+    u.zip_code AS zip_code,
 FROM users_staging u
 JOIN age_group_staging ag ON u.age = ag.id
 JOIN occupations_staging o ON u.occupation_id = o.id;
@@ -123,10 +126,10 @@ JOIN occupations_staging o ON u.occupation_id = o.id;
 CREATE OR REPLACE TABLE dim_date AS 
 SELECT
     ROW_NUMBER() OVER (ORDER BY CAST(rated_at AS DATE)) AS dim_dateid, 
-    CAST(rated_at AS DATE) AS date,
     DATE_PART(day, rated_at) AS day,
     DATE_PART(month, rated_at) AS month,
-    DATE_PART(year, rated_at) AS year
+    DATE_PART(year, rated_at) AS year,
+    CAST(rated_at AS DATE) AS date
 FROM ratings_staging
 GROUP BY CAST(rated_at AS DATE),
          DATE_PART(day, rated_at),
@@ -151,18 +154,19 @@ ORDER BY
 
 CREATE OR REPLACE TABLE dim_tags AS
 SELECT DISTINCT
-    ROW_NUMBER() OVER (ORDER BY tags) AS dim_tagid,
-    movie_id,
-    tags AS tag
-FROM tags_staging
-WHERE tags IS NOT NULL;
+    tg.id,
+    tg.movie_id,
+    tg.user_id,
+    tg.tags AS tag,
+    tg.created_at
+FROM tags_staging tg;
 
 CREATE OR REPLACE TABLE fact_rating AS
 SELECT
     r.id AS fact_ratingid,
     r.rated_at AS rated_at,
     r.rating,
-    tg.dim_tagid AS dim_tagid,
+    COALESCE(LISTAGG(tg.movie_id || '-' || tg.user_id, ',') WITHIN GROUP (ORDER BY tg.movie_id, tg.user_id), '') AS tags,
     d.dim_dateid AS dim_dateid,
     t.dim_timeid AS dim_timeid,
     u.dim_userid AS dim_userid,
@@ -175,9 +179,8 @@ JOIN dim_time t ON DATE_PART(hour, r.rated_at) = t.hour
 LEFT JOIN dim_users u ON r.user_id = u.dim_userid
 LEFT JOIN dim_movies m ON r.movie_id = m.dim_movieid
 LEFT JOIN dim_tags tg ON r.movie_id = tg.movie_id
-GROUP BY r.id, r.rated_at, r.rating, d.dim_dateid, t.dim_timeid, u.dim_userid, m.dim_movieid, tg.movie_id, tg.dim_tagid
+GROUP BY r.id, r.rated_at, r.rating, d.dim_dateid, t.dim_timeid, u.dim_userid, m.dim_movieid
 ORDER BY r.id;
-
 
 DROP TABLE IF EXISTS age_group_staging; 
 DROP TABLE IF EXISTS genres_movies_staging;
