@@ -41,14 +41,16 @@ Pre vykonanie ETL procesu si musíme vytvoriť stage a stage tabuľky, ktoré bu
 ### 3.1 Extract
 Táto časť dokumentu je zameraná na extrahovanie dát z datasetu s príponou .csv do už spomenutých stage tabuľiek. Predtým, než budeme pokračovať, je nutné si najskôr vytvoriť stage tabulky podľa ERD schemy a následne vytvoriť stage.
 - **Query pre vytvorenie stage**:
-
-      CREATE OR REPLACE STAGE movielens_stage;
+```SQL
+CREATE OR REPLACE STAGE movielens_stage;
+```
 Teraz môžme načítať do stage-u pomocou snowflake dáta a kopírovať ich do staging tabuliek
 - **Query pre kopírovanie dát**:
-
-      COPY INTO users_staging
-	  FROM @movielens_stage/users.csv
-	  FILE_FORMAT = (TYPE = 'CSV' FIELD_OPTIONALLY_ENCLOSED_BY = '"' SKIP_HEADER = 1);
+```SQL
+COPY INTO users_staging
+FROM @movielens_stage/users.csv
+FILE_FORMAT = (TYPE = 'CSV' FIELD_OPTIONALLY_ENCLOSED_BY = '"' SKIP_HEADER = 1);
+```
 Do staging tabulky users_staging kopírujeme dáta zo stagingu `movielens` a spravíme tak pre každú tabuľku
 
 ### 3.2 Transform
@@ -57,82 +59,88 @@ Transform fáza je zameraná na spracovanie a úpravu dát zo staging tabuliek d
 Ak boli všetky naše kroky správne, následná analýza dát je jednoduchšia a efektívnejšia. Každá z našich dimenzionálnych tabuliek obsahuje potrebné údaje pre analýzu a zároveň sú to referenčné tabuľky pre faktovú tabuľku.
 
 - **dim_movies**
-      
-      CREATE OR REPLACE TABLE dim_movies AS
-      SELECT DISTINCT 
-        m.id AS dim_movieid,
-        m.title AS title,
-        g.name AS genre,
-        m.release_year AS release_year,
-      FROM movies_staging m
-      JOIN genres_movies_staging gr ON m.id = gr.movie_id
-      JOIN genres_staging g ON gr.genre_id = g.id;
-
+```SQL
+CREATE OR REPLACE TABLE dim_movies AS
+SELECT DISTINCT 
+	m.id AS dim_movieid,
+	m.title AS title,
+	g.name AS genre,
+	m.release_year AS release_year,
+FROM movies_staging m
+JOIN genres_movies_staging gr ON m.id = gr.movie_id
+JOIN genres_staging g ON gr.genre_id = g.id;
+```
 - **dim_users**
-
-    	CREATE OR REPLACE TABLE dim_users AS
-		SELECT DISTINCT
-		    u.id AS dim_userid,
-		    ag.name AS age_group,
-		    u.gender,
-		    o.name AS occupation,
-		    u.zip_code AS zip_code,
-		FROM users_staging u
-		JOIN age_group_staging ag ON u.age = ag.id
-		JOIN occupations_staging o ON u.occupation_id = o.id;
+```SQL
+CREATE OR REPLACE TABLE dim_users AS
+SELECT DISTINCT
+	u.id AS dim_userid,
+	ag.name AS age_group,
+	u.gender,
+	o.name AS occupation,
+	u.zip_code AS zip_code,
+FROM users_staging u
+JOIN age_group_staging ag ON u.age = ag.id
+JOIN occupations_staging o ON u.occupation_id = o.id;
+```
 - **dim_date**
-
-	  CREATE OR REPLACE TABLE dim_date AS 
-	  SELECT
-		    ROW_NUMBER() OVER (ORDER BY CAST(rated_at AS DATE)) AS dim_dateid, 
-		    DATE_PART(day, rated_at) AS day,
-		    DATE_PART(month, rated_at) AS month,
-		    DATE_PART(year, rated_at) AS year,
-		    CAST(rated_at AS DATE) AS date
-	  FROM ratings_staging
-	  GROUP BY CAST(rated_at AS DATE),
-		    DATE_PART(day, rated_at),
-		    DATE_PART(month, rated_at),
-		    DATE_PART(year, rated_at);
+```SQL
+CREATE OR REPLACE TABLE dim_date AS 
+SELECT
+	ROW_NUMBER() OVER (ORDER BY CAST(rated_at AS DATE)) AS dim_dateid, 
+	DATE_PART(day, rated_at) AS day,
+	DATE_PART(month, rated_at) AS month,
+	DATE_PART(year, rated_at) AS year,
+	CAST(rated_at AS DATE) AS date
+FROM ratings_staging
+GROUP BY CAST(rated_at AS DATE),
+	DATE_PART(day, rated_at),
+	DATE_PART(month, rated_at),
+	DATE_PART(year, rated_at);
+```
 - **dim_time**
-
-		CREATE OR REPLACE TABLE dim_time AS
-		SELECT DISTINCT
-		    ROW_NUMBER() OVER (ORDER BY DATE_PART(hour, rated_at), DATE_PART(minute, rated_at), DATE_PART(second, rated_at)) AS dim_timeid,
-		    DATE_PART(hour, rated_at) AS hour,
-		    DATE_PART(minute, rated_at) AS minute,
-		    DATE_PART(second, rated_at) AS second
-		FROM ratings_staging
-		GROUP BY 
-		    DATE_PART(hour, rated_at),
-		    DATE_PART(minute, rated_at),
-		    DATE_PART(second, rated_at)
-		ORDER BY 
-		    DATE_PART(hour, rated_at),
-		    DATE_PART(minute, rated_at),
-		    DATE_PART(second, rated_at);
+```SQL
+CREATE OR REPLACE TABLE dim_time AS
+SELECT DISTINCT
+	ROW_NUMBER() OVER (ORDER BY DATE_PART(hour, rated_at), DATE_PART(minute, rated_at), 
+	DATE_PART(second, rated_at)) AS dim_timeid,
+	(hour, rated_at) AS hour,
+	(minute, rated_at) AS minute,
+	(second, rated_at) AS second
+FROM ratings_staging
+BY 
+	DATE_PART(hour, rated_at),
+	DATE_PART(minute, rated_at),
+	DATE_PART(second, rated_at)
+BY 
+	DATE_PART(hour, rated_at),
+	DATE_PART(minute, rated_at),
+	DATE_PART(second, rated_at);
+```
 - **dim_tags**
-
-	  CREATE OR REPLACE TABLE dim_tags AS
-	  SELECT DISTINCT
-	      tg.id,
-	      tg.movie_id,
-	      tg.user_id,
-	      tg.tags AS tag,
-	      tg.created_at
-	  FROM tags_staging tg;
+```SQL
+OR REPLACE TABLE dim_tags AS
+DISTINCT
+	.id,
+	.movie_id,
+	.user_id,
+	.tags AS tag,
+	.created_at
+FROM tags_staging tg;
+```
 ### 3.2 Load
 Po úspešnom vytvorení dimenzií a faktovej tabuľky máme dáta načítané do konečného formátu. Na koniec môžeme vymazať staging tabulky aby sme efektívnejšie využili úložisko.
 - **Query pre vymazanie staging tabuliek:**
-
-      DROP TABLE IF EXISTS age_group_staging; 
-	  DROP TABLE IF EXISTS genres_movies_staging;
-	  DROP TABLE IF EXISTS genres_staging;
-	  DROP TABLE IF EXISTS movies_staging;
-	  DROP TABLE IF EXISTS occupations_staging;
-	  DROP TABLE IF EXISTS ratings_staging;
-	  DROP TABLE IF EXISTS tags_staging;
-	  DROP TABLE IF EXISTS users_staging;
+```SQL
+DROP TABLE IF EXISTS age_group_staging; 
+DROP TABLE IF EXISTS genres_movies_staging;
+DROP TABLE IF EXISTS genres_staging;
+DROP TABLE IF EXISTS movies_staging;
+DROP TABLE IF EXISTS occupations_staging;
+DROP TABLE IF EXISTS ratings_staging;
+DROP TABLE IF EXISTS tags_staging;
+DROP TABLE IF EXISTS users_staging;
+```
 ## 4. Vizualizácia dát
 <p align="center"> 
   <img src="https://github.com/SamoM225/db_semestralny_projekt/blob/main/grafy_dashboard.PNG?raw=true" alt="Star Schema"> 
@@ -142,70 +150,75 @@ Po úspešnom vytvorení dimenzií a faktovej tabuľky máme dáta načítané d
 
 **Graf 1: Rozdelenie uživatelov podľa pohlavia**
 Graf nám zobrazuje rozdelenie užívateľov na pohlavie.
-
-    SELECT 
-	    u.gender AS user_gender,
-	    COUNT(r.fact_ratingid) AS num_unique_ratings
-	FROM 
-	    fact_rating r
-	JOIN 
-	    dim_users u ON r.dim_userid = r.fact_ratingid
-	GROUP BY 
-	    u.gender
-	ORDER BY 
-	    num_unique_ratings DESC;
+```SQL
+SELECT 
+	u.gender AS user_gender,
+	COUNT(r.fact_ratingid) AS num_unique_ratings
+FROM 
+	fact_rating r
+JOIN 
+	dim_users u ON r.dim_userid = r.fact_ratingid
+GROUP BY 
+	u.gender
+ORDER BY 
+	num_unique_ratings DESC;
+```
 **Graf 2: Počet hodnotení na vekovú skupinu**
 Graf nám zobrazuje Hodnotenia, ktoré vytvorila každá veková skupina. Graf nám pomáha zistiť, ktorá veková skupina má najčastejšiu interakciu s filmami.
-
-    SELECT 
-	    u.age_group AS age_group,
-	    COUNT(fr.fact_ratingid) AS num_ratings
-	FROM 
-	    fact_rating fr
-	JOIN 
-	    dim_users u ON fr.dim_userid = u.dim_userid
-	GROUP BY 
-	    u.age_group
-	ORDER BY 
-	    num_ratings DESC;
+```SQL
+SELECT 
+	u.age_group AS age_group,
+	COUNT(fr.fact_ratingid) AS num_ratings
+FROM 
+	fact_rating fr
+JOIN 
+	dim_users u ON fr.dim_userid = u.dim_userid
+GROUP BY 
+	u.age_group
+ORDER BY 
+	num_ratings DESC;
+```
 **Graf 3: Priemerné hodnotenie na žáner**
 Graf nám zobrazuje priemerné hodnotenie filmu na žáner. Graf nám pomáha zistiť, ktoré žánre sú najviac trendy.
-
-    SELECT 
-    m.genre AS genre, 
-    ROUND(AVG(r.rating), 1) AS avg_rating,
-    COUNT(r.rating) AS ratings
-	FROM 
-	    fact_rating r
-	JOIN 
-	    dim_movies m ON r.dim_movieid = m.dim_movieid
-	GROUP BY 
-	    m.genre
-	ORDER BY 
-	    avg_rating DESC
-	LIMIT 10;
-- **Graf 4: Počet hodnotení na hodinu (0-24)**
+```SQL
+SELECT 
+	m.genre AS genre, 
+	ROUND(AVG(r.rating), 1) AS avg_rating,
+	COUNT(r.rating) AS ratings
+FROM 
+	fact_rating r
+JOIN 
+	dim_movies m ON r.dim_movieid = m.dim_movieid
+GROUP BY 
+	m.genre
+ORDER BY 
+	avg_rating DESC
+LIMIT 10;
+```
+**Graf 4: Počet hodnotení na hodinu (0-24)**
 Graf nám ukazuje, kedy uživatelia najčastejšie interagujú (hodnotia) filmy počas danej hodiny.
-
-	  SELECT 
-		  DATE_PART(hour, fr.rated_at) AS rating_hour, 
-		  COUNT(*) AS rating_count,
-		  ROUND(AVG(fr.rating),1) AS avg_rating,
-      FROM 
-	      fact_rating fr
-	  GROUP BY 
-	      DATE_PART(hour, fr.rated_at)
-	  ORDER BY 
-	      rating_hour;
+```SQL
+SELECT 
+	DATE_PART(hour, fr.rated_at) AS rating_hour, 
+	COUNT(*) AS rating_count,
+	ROUND(AVG(fr.rating),1) AS avg_rating,
+FROM 
+	fact_rating fr
+GROUP BY 
+	DATE_PART(hour, fr.rated_at)
+ORDER BY 
+	rating_hour;
+```
 -**Graf 5: Počet filmov na žáner**
 Graf nám zobrazuje počet vydaných filmov na žáner. Pri zakomponovaní viacerých údajov je možné zistiť, ako sa menila krivka a ako sa menili najčastejšie žánre filmov.
-
-    SELECT 
-	    m.genre AS genre,
-	    COUNT(m.dim_movieid) AS movie_count
-	FROM dim_movies m
-	GROUP BY m.genre
-	ORDER BY movie_count DESC
-	LIMIT 10;
+```SQL
+SELECT 
+	m.genre AS genre,
+	COUNT(m.dim_movieid) AS movie_count
+FROM dim_movies m
+GROUP BY m.genre
+ORDER BY movie_count DESC
+LIMIT 10;
+```
 #
 Autor: Samuel Majerčík
